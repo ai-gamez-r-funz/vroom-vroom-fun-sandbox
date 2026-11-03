@@ -10,7 +10,9 @@ GitHub Pages or itch.io as-is.
 - Simple, forgiving handling, with handbrake drifts, nitro, big jumps and air-steer spins
 - Each surface drives differently: asphalt, concrete, dirt, grass, sand, snow, rock and shallow water
 - Weather changes grip. Rain and snow make roads slippery, and storms bring wind gusts, lightning and thunder
-- Arcade collisions with buildings, trees, rocks, lamp posts and traffic. Cones, barrels, crates and hay bales can be knocked flying
+- Drifting: tap the handbrake, or flick into a corner at speed with full steering and throttle, then hold the throttle to stay sideways. Lift off to grip up again. Sand, snow and grass make the back end looser
+- Trees, cacti and lamp posts work GTA-style. A slow bump stops you, but a fast hit snaps them over and costs you some speed. They respawn after 45 s once you've driven away, or straight away when you're far off (`BREAKABLES` / `BREAK_RESPAWN` in `src/world.js`)
+- Bumper-car collisions with traffic and mission cars: both cars bounce apart and NPCs get shoved around, so you keep most of your momentum (`BUMP` in `src/car.js`). Cones, barrels, crates and hay bales can be knocked flying
 
 **Car customisation**
 - 10 vehicles: hatchback, sedan, muscle car, rally car, sports car, SUV, pickup, van, monster truck and hypercar

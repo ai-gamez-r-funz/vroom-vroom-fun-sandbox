@@ -386,7 +386,7 @@ export const TEMPLATES = {
       const kinds = [
         { kind: 'air', target: +(1.4 + d * 1.6).toFixed(1), text: (t) => `Get ${t}s of airtime in one jump`, unit: 's' },
         { kind: 'jumpdist', target: Math.round(40 + d * 50), text: (t) => `Jump at least ${t} m`, unit: 'm' },
-        { kind: 'drift', target: Math.round(1500 + d * 4000), text: (t) => `Score a ${t}-point drift`, unit: 'pts' },
+        { kind: 'drift', target: Math.round(600 + d * 1600), text: (t) => `Score a ${t}-point drift`, unit: 'pts' },
         { kind: 'speed', target: Math.round(150 + d * 90), text: (t) => `Hit ${t} km/h`, unit: 'km/h' },
         { kind: 'smash', target: Math.round(6 + d * 10), text: (t) => `Smash ${t} props`, unit: 'props' },
       ];

@@ -126,7 +126,7 @@ export class MissionRunner {
       if (e.type === 'land') this.mood(p === 'thrill' ? 6 : p === 'nervous' ? -12 : -2);
       if (e.type === 'jump' && p === 'thrill') { this.mood(8); this.tips += Math.round(e.air * 40); }
       if (e.type === 'jump' && p === 'nervous') this.mood(-10);
-      if (e.type === 'drift' && p === 'thrill') { this.mood(5); this.tips += Math.round(e.score / 20); }
+      if (e.type === 'drift' && p === 'thrill') { this.mood(5); this.tips += Math.round(e.score / 40); }
     } else if (cargo.kind === 'patient' || cargo.kind === 'fragile' || cargo.kind === 'cargo') {
       if (e.type === 'crash') this.condition -= Math.max(0, e.impact - 4) * 1.5 * frag;
       if (e.type === 'land') this.condition -= Math.max(0, e.impact - 8) * 1.2 * frag;

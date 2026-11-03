@@ -63,6 +63,7 @@ export class Traffic {
         this.cars.push({
           lane, model, def, s: ((k + rnd() * 0.5) / count) * n, speed: lane.speed, target: lane.speed * (0.85 + rnd() * 0.3),
           stopped: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, r: def.body.wid / 2,
+          halfLen: def.body.len / 2, mass: def.mass, off: new THREE.Vector2(), offVel: new THREE.Vector2(), wobble: 0, wobbleVel: 0,
         });
       }
     }
@@ -100,24 +101,32 @@ export class Traffic {
       const dx = player.pos.x - c.pos.x, dz = player.pos.z - c.pos.z;
       const ahead = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx);
       if (ahead > 0 && ahead < 22 && side < 3.5) want = Math.min(want, Math.max(0, (ahead - 7) * 1.2));
-      if (c.stopped > 0) { c.stopped -= dt; want = 0; }
-      c.speed = damp(c.speed, want, want < c.speed ? 3 : 0.8, dt);
-      this.sample(c.lane, c.s, tmp);
+      if (c.stopped > 0) { c.stopped -= dt; want = Math.min(want, 3); }
+      c.speed = damp(c.speed, want, want < c.speed ? 2 : 0.8, dt);
       const spacing = c.lane.pts.length > 900 ? 4 : 3;
       c.s += (c.lane.dir * c.speed * dt) / spacing;
       const n = c.lane.pts.length;
       c.s = ((c.s % n) + n) % n;
       this.sample(c.lane, c.s, tmp);
-      const y = this.world.heightAt(tmp.x, tmp.z);
+      // knock-back from bumps: an offset from the lane that springs back, plus a yaw wobble
+      c.offVel.x -= c.off.x * 3 * dt; c.offVel.y -= c.off.y * 3 * dt;
+      const k = Math.exp(-2.5 * dt);
+      c.offVel.multiplyScalar(k);
+      c.off.addScaledVector(c.offVel, dt);
+      if (c.off.lengthSq() > 64) c.off.setLength(8);
+      c.wobbleVel = (c.wobbleVel - c.wobble * 6 * dt) * Math.exp(-3 * dt);
+      c.wobble += c.wobbleVel * dt;
+      const x = tmp.x + c.off.x, z = tmp.z + c.off.y;
+      const y = this.world.heightAt(x, z);
       const prev = this._a.copy(c.pos);
-      c.pos.set(tmp.x, y, tmp.z);
+      c.pos.set(x, y, z);
       c.vel.subVectors(c.pos, prev).divideScalar(Math.max(dt, 1e-3));
       if (c.vel.lengthSq() > 2500) c.vel.set(0, 0, 0); // teleport guard
-      c.yaw = tmp.yaw;
+      c.yaw = tmp.yaw + c.wobble;
       if (dist < 500) {
         c.model.visible = true;
         c.model.position.copy(c.pos);
-        const nrm = this.world.normalAt(tmp.x, tmp.z);
+        const nrm = this.world.normalAt(x, z);
         const fwd = new THREE.Vector3(Math.sin(c.yaw), 0, Math.cos(c.yaw));
         fwd.addScaledVector(nrm, -fwd.dot(nrm)).normalize();
         const right = new THREE.Vector3().crossVectors(nrm, fwd);
@@ -125,10 +134,21 @@ export class Traffic {
         c.model.quaternion.setFromRotationMatrix(this._m);
         for (const w of c.model.userData.wheels) w.spin.rotation.x += (c.speed / c.def.body.wheelR) * dt;
       } else c.model.visible = false;
-      // collisions with the player
-      if (dist < 8 && Math.abs(player.pos.y - c.pos.y) < 2.5) {
-        const hit = player.collideCircle(c.pos.x, c.pos.z, c.r, c.vel);
-        if (hit && hit > 2) { c.stopped = 2.5; c.speed *= 0.3; }
+      // bumper-car collisions with the player
+      if (dist < 12) {
+        const before = c.pos.clone();
+        const res = player.bump(c);
+        if (res && res.impact > 0) {
+          // the positional push and the impulse both go into the knock offset; the part of the
+          // impulse along the lane changes the car's cruising speed (rear-ending shoves it forward)
+          c.off.x += c.pos.x - before.x; c.off.y += c.pos.z - before.z;
+          const laneFx = Math.sin(tmp.yaw), laneFz = Math.cos(tmp.yaw);
+          const along = res.dvB.x * laneFx + res.dvB.z * laneFz;
+          c.speed = Math.max(0, c.speed + along);
+          c.offVel.x += res.dvB.x - laneFx * along; c.offVel.y += res.dvB.z - laneFz * along;
+          c.wobbleVel += res.kickB * 1.5;
+          if (res.impact > 6) c.stopped = 1.2; // a big hit makes them dawdle for a moment
+        }
       }
     }
   }

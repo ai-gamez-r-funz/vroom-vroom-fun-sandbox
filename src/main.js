@@ -156,9 +156,14 @@ class Game {
           this.audio.crash(e.impact * 0.5);
           this.shake = Math.max(this.shake, Math.min(0.6, e.impact / 40));
           break;
+        case 'bump':
+          this.audio.crash(Math.min(4, e.impact * 0.5));
+          break;
         case 'smash': {
           st.smashed++;
-          this.audio.crash(4);
+          const big = e.prop === 'tree' || e.prop === 'lamp';
+          this.audio.crash(big ? 9 : 4);
+          if (big) this.shake = Math.max(this.shake, Math.min(0.6, (e.impact || 4) / 25 + 0.15));
           this.smashCombo.n++; this.smashCombo.t = 2.5;
           const cash = 10 * Math.min(this.smashCombo.n, 10);
           this.state.data.money += cash; st.earned += cash;
@@ -181,7 +186,7 @@ class Game {
         }
         case 'drift': {
           st.bestDrift = Math.max(st.bestDrift, e.score);
-          const cash = Math.round(e.score / 12);
+          const cash = Math.round(e.score / 25);
           this.state.addMoney(cash);
           this.state.addXp(Math.round(cash / 3));
           this.ui.showStunt(`DRIFT ${e.score} <b>+$${cash}</b>`);
@@ -244,6 +249,7 @@ class Game {
       this.traffic.update(dt, car, this.state.data.settings.traffic);
       this.handleCarEvents();
       this.world.updateProps(dt);
+      this.world.updateBreakables(dt, car.pos);
       this.activities.update(dt, car, inp);
       this.missions.update(dt, inp);
       this.gpsTimer = (this.gpsTimer || 0) - dt;
