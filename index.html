@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Vroom Vroom</title>
+  <meta name="description" content="Open-world arcade driving game built with three.js">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏎️</text></svg>">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="loading"><div class="title-logo">VROOM<span>VROOM</span></div><p>Generating world…</p><div class="spinner"></div></div>
+  <div id="ui">
+    <div id="hud">
+      <div id="topleft">
+        <div id="money">$0</div>
+        <div class="lvl"><span id="level">LVL 1</span><div class="xp"><div id="xpbar"></div></div></div>
+      </div>
+      <div id="topright">
+        <div><span id="clock">12:00</span> · <span id="weather">Clear</span></div>
+        <div class="surface">Surface: <span id="surface">Asphalt</span></div>
+      </div>
+      <canvas id="minimap" width="200" height="200"></canvas>
+      <div id="speedo">
+        <div class="speed-row"><span id="speed">0</span><span class="unit">km/h</span></div>
+        <div class="gear-row">GEAR <span id="gear">N</span></div>
+        <div class="meter"><div id="rpmbar"></div></div>
+        <div class="meter nitro"><div id="nitrobar"></div></div>
+      </div>
+      <div id="activity"></div>
+      <div id="banner"></div>
+      <div id="stunt"></div>
+      <div id="prompt"></div>
+      <div id="toasts"></div>
+      <div id="keyhint"><kbd>G</kbd> Garage · <kbd>M</kbd> Map · <kbd>Esc</kbd> Menu</div>
+    </div>
+    <div id="touch">
+      <div class="tleft"><button data-t="left">◀</button><button data-t="right">▶</button></div>
+      <div class="tright">
+        <button data-t="use" class="small">E</button><button data-t="nitro" class="small">N₂O</button><button data-t="hand" class="small">HB</button>
+        <button data-t="brake">▼</button><button data-t="gas">▲</button>
+      </div>
+    </div>
+    <div id="modal"></div>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
