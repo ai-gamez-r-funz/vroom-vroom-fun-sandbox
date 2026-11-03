@@ -25,6 +25,17 @@ export const SURF_PROPS = [
   { grip: 0.95, drag: 0.02, paved: true, bump: 0.0, dust: [0.6, 0.6, 0.6] },
 ];
 
+// Breakable obstacle tuning. breakSpeed in m/s (36 km/h = 10 m/s); slow = share of speed lost on impact.
+export const BREAKABLES = {
+  tree: { breakSpeed: 6, slow: 0.3 },
+  cactus: { breakSpeed: 3, slow: 0.12 },
+  lamp: { breakSpeed: 3.5, slow: 0.15 },
+};
+// Respawn after `time` seconds once the player is at least `minDistance` away,
+// or sooner (3 s) whenever the player is more than `farDistance` away.
+export const BREAK_RESPAWN = { time: 45, minDistance: 35, farDistance: 220 };
+const ZERO_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
+
 function biomeWeights(x, z) {
   return {
     n: smoothstep(380, 650, -z),
@@ -156,6 +167,7 @@ export class World {
     this.circles = [];
     this.grid = new Map();
     this.props = [];
+    this.brokenList = [];
     this.lampPositions = [];
     this.buildingMats = [];
     this.nightMats = [];
@@ -487,6 +499,73 @@ export class World {
     this.hashInsert(c, x - r, x + r, z - r, z + r);
     return c;
   }
+  // ------------------------------------------------------------------------------------------
+  // Breakable obstacles (GTA style): solid at low speed, but a hard hit snaps them off.
+  // breakSpeed: closing speed (m/s) needed to break it; slow: fraction of the car's speed lost.
+  addBreakable(kind, x, z, r, top, parts) {
+    const cfg = BREAKABLES[kind];
+    return this.addCircle(x, z, r, top, { tree: kind === 'tree', breakable: kind, parts, broken: false, ...cfg });
+  }
+
+  breakObstacle(c, dirX, dirZ, speed) {
+    if (c.broken) return;
+    c.broken = true;
+    c.brokenT = 0;
+    const gy = this.terrainHeight(c.x, c.z);
+    const debris = new THREE.Group();
+    debris.position.set(c.x, gy, c.z);
+    const toLocal = new THREE.Matrix4().makeTranslation(-c.x, -gy, -c.z);
+    c.saved = c.parts.map(([im, i]) => {
+      const m = new THREE.Matrix4();
+      im.getMatrixAt(i, m);
+      const mesh = new THREE.Mesh(im.geometry, im.material);
+      mesh.applyMatrix4(m.clone().premultiply(toLocal));
+      mesh.castShadow = true;
+      debris.add(mesh);
+      im.setMatrixAt(i, ZERO_MATRIX);
+      im.instanceMatrix.needsUpdate = true;
+      return m;
+    });
+    const dl = Math.hypot(dirX, dirZ) || 1;
+    const dx = dirX / dl, dz = dirZ / dl;
+    debris.userData = {
+      axis: new THREE.Vector3(dz, 0, -dx), // rotating about this tips the top towards (dx, dz)
+      angle: 0, angVel: 0.6 + speed * 0.06, maxAngle: c.breakable === 'lamp' ? 1.5 : 1.42,
+      slide: new THREE.Vector3(dx, 0, dz).multiplyScalar(Math.min(12, speed * 0.4)),
+    };
+    this.scene.add(debris);
+    c.debris = debris;
+    this.brokenList.push(c);
+    // keep the number of fallen objects bounded
+    if (this.brokenList.length > 40) this.respawnObstacle(this.brokenList[0]);
+  }
+
+  respawnObstacle(c) {
+    c.parts.forEach(([im, i], k) => { im.setMatrixAt(i, c.saved[k]); im.instanceMatrix.needsUpdate = true; });
+    if (c.debris) this.scene.remove(c.debris);
+    c.debris = null;
+    c.broken = false;
+    this.brokenList.splice(this.brokenList.indexOf(c), 1);
+  }
+
+  updateBreakables(dt, focus) {
+    for (let k = this.brokenList.length - 1; k >= 0; k--) {
+      const c = this.brokenList[k];
+      c.brokenT += dt;
+      const d = c.debris.userData;
+      if (d.angle < d.maxAngle) {
+        d.angVel += 7 * Math.sin(d.angle + 0.2) * dt; // gravity accelerates the topple
+        d.angle = Math.min(d.maxAngle, d.angle + d.angVel * dt);
+        c.debris.quaternion.setFromAxisAngle(d.axis, d.angle);
+      }
+      c.debris.position.addScaledVector(d.slide, dt);
+      d.slide.multiplyScalar(Math.exp(-3 * dt));
+      c.debris.position.y = this.terrainHeight(c.debris.position.x, c.debris.position.z);
+      const dist = Math.hypot(c.x - focus.x, c.z - focus.z);
+      if ((c.brokenT > BREAK_RESPAWN.time && dist > BREAK_RESPAWN.minDistance) || (c.brokenT > 3 && dist > BREAK_RESPAWN.farDistance)) this.respawnObstacle(c);
+    }
+  }
+
   hashInsert(obj, minX, maxX, minZ, maxZ) {
     const G = 40;
     for (let gx = Math.floor(minX / G); gx <= Math.floor(maxX / G); gx++)
@@ -681,7 +760,7 @@ export class World {
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), l[2]);
       m4.compose(new THREE.Vector3(l[0], 2, l[1]), q, new THREE.Vector3(1, 1, 1));
       poles.setMatrixAt(i, m4); heads.setMatrixAt(i, m4);
-      this.addCircle(l[0], l[1], 0.25, 9);
+      this.addBreakable('lamp', l[0], l[1], 0.25, 9, [[poles, i], [heads, i]]);
       this.lampPositions.push(new THREE.Vector3(l[0], 9, l[1]));
     });
     poles.castShadow = true;
@@ -876,12 +955,14 @@ export class World {
     const cactusMat = new THREE.MeshLambertMaterial({ color: 0x4f7f3a });
     const rockGeo = new THREE.DodecahedronGeometry(1.4, 0);
     const rockMat = new THREE.MeshLambertMaterial({ color: 0x7a7570, flatShading: true });
-    inst(trunkGeo, trunkMat, pines); inst(pineGeo, pineMat, pines);
-    inst(trunkGeo, trunkMat, rounds); inst(roundGeo, roundMat, rounds);
-    inst(cactusGeo, cactusMat, cacti);
+    const pineTrunks = inst(trunkGeo, trunkMat, pines), pineTops = inst(pineGeo, pineMat, pines);
+    const roundTrunks = inst(trunkGeo, trunkMat, rounds), roundTops = inst(roundGeo, roundMat, rounds);
+    const cactusIm = inst(cactusGeo, cactusMat, cacti);
     inst(rockGeo, rockMat, rocks);
-    for (const t of [...pines, ...rounds]) this.addCircle(t[0], t[2], 0.5 * t[3] + 0.1, t[1] + 8, { tree: true });
-    for (const t of cacti) this.addCircle(t[0], t[2], 0.5 * t[3], t[1] + 4);
+    // trees, cacti and lamp posts snap and topple when hit hard enough, then respawn later
+    pines.forEach((t, i) => this.addBreakable('tree', t[0], t[2], 0.5 * t[3] + 0.1, t[1] + 8, [[pineTrunks, i], [pineTops, i]]));
+    rounds.forEach((t, i) => this.addBreakable('tree', t[0], t[2], 0.5 * t[3] + 0.1, t[1] + 8, [[roundTrunks, i], [roundTops, i]]));
+    cacti.forEach((t, i) => this.addBreakable('cactus', t[0], t[2], 0.5 * t[3], t[1] + 4, [[cactusIm, i]]));
     for (const t of rocks) this.addCircle(t[0], t[2], 1.1 * t[3], t[1] + 1.2 * t[3]);
     this.treeCount = pines.length + rounds.length;
   }

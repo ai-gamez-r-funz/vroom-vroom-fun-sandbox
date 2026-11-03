@@ -188,21 +188,12 @@ export class AIDriver {
     if (this.opts.mode === 'pursue') this.replanT = 0;
   }
 
-  // collisions between this AI car and the player
+  // bumper-car collisions between this AI car and the player; returns the impact speed
   collidePlayer() {
-    const pl = this.game.car;
-    if (Math.abs(pl.pos.y - this.car.pos.y) > 2.5) return 0;
-    const ax = this.car.pos.x, az = this.car.pos.z;
-    const pvx = pl.vel.x, pvz = pl.vel.z;
-    const impact = pl.collideCircle(ax, az, this.car.radius, this.car.vel);
-    if (impact > 0) {
-      // push the AI the other way
-      const dx = ax - pl.pos.x, dz = az - pl.pos.z, d = Math.hypot(dx, dz) || 1;
-      const k = clamp(impact * 0.5 * (pl.stats.mass / this.car.stats.mass), 0, 20);
-      this.car.vel.x += (dx / d) * k + pvx * 0.1;
-      this.car.vel.z += (dz / d) * k + pvz * 0.1;
-      this.car.yawRate += (Math.random() - 0.5) * k * 0.15;
-    }
-    return impact;
+    const res = this.game.car.bump(this.car);
+    if (!res || res.impact <= 0) return 0;
+    this.car.vel.x += res.dvB.x; this.car.vel.z += res.dvB.z;
+    this.car.yawRate += res.kickB;
+    return res.impact;
   }
 }

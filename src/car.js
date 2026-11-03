@@ -165,6 +165,60 @@ export function buildCarModel(def, paint = def.color, finishId = 'gloss') {
 }
 
 // --------------------------------------------------------------------------------------------
+// Bumper-car collision between two vehicles. Each body is a capsule along its heading:
+// { pos, vel, yaw, halfLen, r, mass }. Both get pushed apart and exchange momentum with a
+// bouncy restitution, so hits feel forgiving instead of dead stops. Returns null (no contact) or
+// { impact, dvA, dvB, kickA, kickB } where dv* are velocity changes ({x, z}) and kick* yaw-rate nudges.
+function closestOnSegs(ax, az, bx, bz, cx, cz, dx, dz) {
+  // closest points between segments AB and CD (2D)
+  const ux = bx - ax, uz = bz - az, vx = dx - cx, vz = dz - cz, wx = ax - cx, wz = az - cz;
+  const a = ux * ux + uz * uz, b = ux * vx + uz * vz, c = vx * vx + vz * vz, d = ux * wx + uz * wz, e = vx * wx + vz * wz;
+  const den = a * c - b * b;
+  let s = den > 1e-6 ? clamp((b * e - c * d) / den, 0, 1) : 0;
+  let t = c > 1e-6 ? (b * s + e) / c : 0;
+  if (t < 0) { t = 0; s = a > 1e-6 ? clamp(-d / a, 0, 1) : 0; }
+  else if (t > 1) { t = 1; s = a > 1e-6 ? clamp((b - d) / a, 0, 1) : 0; }
+  return [ax + ux * s, az + uz * s, cx + vx * t, cz + vz * t];
+}
+
+// Arcade tuning for player-vs-NPC hits: NPCs count as lighter so they get shoved around
+// and the player keeps more momentum; restitution sets how bouncy the hit is.
+export const BUMP = { npcMassScale: 0.5, restitution: 0.5, minBounce: 1.2 };
+
+export function bumpCars(A, B, restitution = BUMP.restitution, massScaleB = 1) {
+  if (Math.abs(A.pos.y - B.pos.y) > 2.5) return null;
+  const dx0 = A.pos.x - B.pos.x, dz0 = A.pos.z - B.pos.z;
+  const reach = A.halfLen + B.halfLen + A.r + B.r;
+  if (dx0 * dx0 + dz0 * dz0 > reach * reach) return null;
+  const segA = Math.max(0, A.halfLen - A.r), segB = Math.max(0, B.halfLen - B.r);
+  const afx = Math.sin(A.yaw), afz = Math.cos(A.yaw), bfx = Math.sin(B.yaw), bfz = Math.cos(B.yaw);
+  const [pax, paz, pbx, pbz] = closestOnSegs(
+    A.pos.x - afx * segA, A.pos.z - afz * segA, A.pos.x + afx * segA, A.pos.z + afz * segA,
+    B.pos.x - bfx * segB, B.pos.z - bfz * segB, B.pos.x + bfx * segB, B.pos.z + bfz * segB);
+  let nx = pax - pbx, nz = paz - pbz;
+  let d = Math.hypot(nx, nz);
+  const R = A.r + B.r;
+  if (d >= R) return null;
+  if (d < 1e-4) { nx = dx0; nz = dz0; d = Math.hypot(nx, nz) || 1; }
+  nx /= d; nz /= d;
+  const pen = R - Math.min(d, R);
+  const im = 1 / A.mass, jm = 1 / (B.mass * massScaleB), sum = im + jm;
+  // positional separation, split by mass
+  A.pos.x += nx * pen * (im / sum); A.pos.z += nz * pen * (im / sum);
+  B.pos.x -= nx * pen * (jm / sum); B.pos.z -= nz * pen * (jm / sum);
+  const vrel = (A.vel.x - B.vel.x) * nx + (A.vel.z - B.vel.z) * nz;
+  if (vrel >= 0) return { impact: 0, dvA: { x: 0, z: 0 }, dvB: { x: 0, z: 0 }, kickA: 0, kickB: 0 };
+  // a minimum bounce makes even slow taps pop apart a little
+  const j = (-(1 + restitution) * vrel + BUMP.minBounce) / sum;
+  const dvA = { x: nx * j * im, z: nz * j * im }, dvB = { x: -nx * j * jm, z: -nz * j * jm };
+  // off-centre hits spin the cars a bit (torque around each centre)
+  const cx = (pax + pbx) / 2, cz = (paz + pbz) / 2;
+  const torque = (rx, rz, jx, jz) => rx * jz - rz * jx;
+  const kickA = clamp(-torque(cx - A.pos.x, cz - A.pos.z, nx * j, nz * j) * im / Math.max(1, A.halfLen * A.halfLen * 0.35), -2.5, 2.5);
+  const kickB = clamp(-torque(cx - B.pos.x, cz - B.pos.z, -nx * j, -nz * j) * jm / Math.max(1, B.halfLen * B.halfLen * 0.35), -2.5, 2.5);
+  return { impact: -vrel, dvA, dvB, kickA, kickB, nx, nz };
+}
+
 export class Car {
   constructor(def, stats, setup, scene) {
     this.scene = scene;
@@ -186,6 +240,7 @@ export class Car {
     this.bodyRoll = 0;
     this.prevVf = 0;
     this.slip = 0;
+    this.slipAngle = 0;
     this.surface = SURF.ASPHALT;
     this.submerged = 0;
     this.lastSafe = { pos: new THREE.Vector3(), yaw: 0 };
@@ -219,6 +274,9 @@ export class Car {
     this.vel.set(0, 0, 0);
     this.yaw = yaw;
     this.yawRate = 0;
+    this.steer = 0;
+    this.slipAngle = 0;
+    this.drift = { active: false, score: 0, timer: 0, mult: 1 };
     this.grounded = true;
     this.airTime = 0;
     this.submerged = 0;
@@ -230,6 +288,21 @@ export class Car {
   }
 
   get speed() { return Math.hypot(this.vel.x, this.vel.z); }
+  get mass() { return this.stats.mass; }
+  get r() { return this.radius; }
+
+  // Bump into another vehicle body (see bumpCars). Applies our half; returns the result so the
+  // caller can apply the other half to whatever the other body is (traffic, AI car...).
+  bump(other) {
+    const res = bumpCars(this, other, BUMP.restitution, BUMP.npcMassScale);
+    if (!res || res.impact <= 0) return res;
+    this.vel.x += res.dvA.x; this.vel.z += res.dvA.z;
+    this.yawRate += res.kickA;
+    const felt = Math.hypot(res.dvA.x, res.dvA.z);
+    if (felt > 2.5) this.emit('crash', { impact: felt, vehicle: true });
+    else if (res.impact > 1.5) this.emit('bump', { impact: res.impact });
+    return res;
+  }
   get forward() { return _v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)); }
 
   emit(type, data = {}) { this.events.push({ type, ...data }); }
@@ -304,29 +377,46 @@ export class Car {
       if (input.handbrake) vf -= Math.sign(vf) * Math.min(Math.abs(vf), 5 * dt);
 
       // ---------------- steering ----------------
+      // Velocity is kept in world space while the body rotates, so turning creates real
+      // sideways slip that the tyres then scrub off. Low tyre grip = the slip survives = drift.
+      this.vel.x = fx * vf + rx * vl;
+      this.vel.z = fz * vf + rz * vl;
+      const sliding = this.slipAngle > 0.12 && speed > 8;
       const wheelBase = this.halfLen * 1.4;
       const maxAngle = 0.62 / (1 + speed / 22);
       const angle = -this.steer * maxAngle * s.steer;
       let targetYawRate = (vf * Math.tan(angle)) / wheelBase;
       const latMax = 13 * grip * s.stability;
-      if (speed > 1) targetYawRate = clamp(targetYawRate, -latMax / speed - 0.4, latMax / speed + 0.4);
+      // while sliding (or on the handbrake) the car may rotate faster than the tyres allow
+      const extra = input.handbrake || sliding ? 1.0 : 0.4;
+      if (speed > 1) targetYawRate = clamp(targetYawRate, -latMax / speed - extra, latMax / speed + extra);
       if (input.handbrake && speed > 6) targetYawRate *= 1.6;
+      else if (sliding && input.throttle > 0) targetYawRate *= 1.25; // throttle swings the tail
       this.yawRate = damp(this.yawRate, targetYawRate, 9 * Math.min(1.3, grip), dt);
       this.yaw = wrapAngle(this.yaw + this.yawRate * dt);
 
-      // ---------------- lateral grip ----------------
+      // ---------------- lateral grip (in the new heading) ----------------
+      const nfx = Math.sin(this.yaw), nfz = Math.cos(this.yaw);
+      const nrx = -nfz, nrz = nfx;
+      vf = this.vel.x * nfx + this.vel.z * nfz;
+      vl = this.vel.x * nrx + this.vel.z * nrz;
       let latGrip = 9 * grip;
-      if (input.handbrake) latGrip = 1.0;
+      if (input.handbrake) latGrip = 1.2;
+      else if (sliding) latGrip = (input.throttle > 0 ? 2.2 : 4.5) * grip; // hold throttle to keep it sideways, lift to grip up
+      else if (Math.abs(this.steer) > 0.75 && speed > 15 && input.throttle > 0) latGrip *= 0.55; // flick it in with throttle
       // loose cars (low grip vs power) slide more when flooring it
       if (input.throttle > 0 && speed > 8 && s.accel / grip > 18) latGrip *= 0.7;
       vl *= Math.exp(-latGrip * dt);
+      // scrubbing sideways costs a little speed, but much less than braking
+      if (sliding) vf -= Math.sign(vf) * Math.min(Math.abs(vf), Math.abs(vl) * 0.12 * dt);
       this.slip = Math.abs(vl);
+      this.slipAngle = Math.atan2(this.slip, Math.max(1, Math.abs(vf)));
 
-      // drift scoring
-      if (this.slip > 3.5 && speed > 9) {
+      // drift scoring: based on slip angle, so it works at any speed above a crawl
+      if (this.slipAngle > 0.14 && speed > 8 && this.slip > 2) {
         this.drift.active = true;
         this.drift.timer = 0;
-        this.drift.score += this.slip * speed * dt * 0.6 * this.drift.mult;
+        this.drift.score += this.slip * speed * dt * 2 * this.drift.mult;
         this.drift.mult = Math.min(5, this.drift.mult + dt * 0.25);
       } else if (this.drift.active) {
         this.drift.timer += dt;
@@ -336,9 +426,6 @@ export class Car {
         }
       }
 
-      // recompose with new heading
-      const nfx = Math.sin(this.yaw), nfz = Math.cos(this.yaw);
-      const nrx = -nfz, nrz = nfx;
       this.vel.x = nfx * vf + nrx * vl;
       this.vel.z = nfz * vf + nrz * vl;
 
@@ -456,7 +543,23 @@ export class Car {
     for (const off of offs) {
       const cx = this.pos.x + fx * off, cz = this.pos.z + fz * off;
       for (const c of _colliders) {
-        if (this.pos.y > c.top) continue;
+        if (this.pos.y > c.top || c.broken) continue;
+        if (c.breakable) {
+          const dx = cx - c.x, dz = cz - c.z;
+          const d = Math.hypot(dx, dz);
+          if (d < r + c.r && d > 0) {
+            // closing speed into the obstacle; heavy "smash" vehicles break things more easily
+            const closing = -(this.vel.x * dx + this.vel.z * dz) / d;
+            if (closing > c.breakSpeed / this.stats.smash) {
+              const sp = this.speed;
+              world.breakObstacle(c, this.vel.x, this.vel.z, sp);
+              const loss = clamp(c.slow * Math.sqrt(1400 / this.stats.mass) / this.stats.smash, 0.03, 0.6);
+              this.vel.x *= 1 - loss; this.vel.z *= 1 - loss;
+              this.emit('smash', { prop: c.breakable, speed: sp, impact: closing * loss * 3 });
+              continue;
+            }
+          }
+        }
         let nx, nz, pen;
         if (c.circle) {
           const dx = cx - c.x, dz = cz - c.z;
@@ -519,25 +622,6 @@ export class Car {
       this.yawRate += side * Math.min(2, -vn * 0.08);
       if (-vn > 3) this.emit('crash', { impact: -vn });
     }
-  }
-
-  // Generic circle push used by traffic cars.
-  collideCircle(x, z, r, otherVel) {
-    const dx = this.pos.x - x, dz = this.pos.z - z;
-    const d = Math.hypot(dx, dz);
-    const R = this.radius + r + this.halfLen * 0.5;
-    if (d >= R || d === 0) return false;
-    const nx = dx / d, nz = dz / d;
-    const rvx = this.vel.x - (otherVel ? otherVel.x : 0), rvz = this.vel.z - (otherVel ? otherVel.z : 0);
-    this.pos.x += nx * (R - d);
-    this.pos.z += nz * (R - d);
-    const vn = rvx * nx + rvz * nz;
-    if (vn < 0) {
-      this.vel.x -= 1.4 * vn * nx;
-      this.vel.z -= 1.4 * vn * nz;
-      if (-vn > 3) this.emit('crash', { impact: -vn, traffic: true });
-    }
-    return -vn;
   }
 
   syncModel(dt, world) {
