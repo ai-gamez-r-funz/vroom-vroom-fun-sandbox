@@ -5,6 +5,9 @@ import { Car } from './car.js';
 import { Environment } from './environment.js';
 import { Traffic } from './traffic.js';
 import { Activities } from './activities.js';
+import { RoadGraph } from './missions/roadgraph.js';
+import { Places } from './missions/places.js';
+import { MissionManager } from './missions/manager.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
@@ -39,6 +42,8 @@ class Game {
     this.audio.setVolume(this.state.data.settings.volume);
 
     this.world = new World(this.scene);
+    this.graph = new RoadGraph(this.world);
+    this.places = new Places(this.world, this.graph);
     this.env = new Environment(this.scene, this.renderer);
     this.env.onThunder = () => setTimeout(() => this.audio.thunder(), 400 + Math.random() * 1500);
     const def = vehicleById(this.state.data.current);
@@ -48,6 +53,7 @@ class Game {
     this.traffic = new Traffic(this.scene, this.world);
     this.ui = new UI(this);
     this.activities = new Activities(this);
+    this.missions = new MissionManager(this);
     this.applyQuality();
 
     window.addEventListener('resize', () => this.resize());
@@ -140,6 +146,7 @@ class Game {
     const car = this.car, st = this.state.data.stats;
     for (const e of car.events) {
       this.activities.onCarEvent(e);
+      this.missions.onCarEvent(e);
       switch (e.type) {
         case 'crash':
           this.audio.crash(e.impact);
@@ -192,6 +199,11 @@ class Game {
     car.events.length = 0;
   }
 
+  // Where the GPS arrow and minimap route should point (event > mission > waypoint).
+  currentTarget() {
+    return this.activities.targetPoint() || this.missions.targetPoint() || this.waypoint;
+  }
+
   resetCar() {
     const s = this.car.lastSafe;
     this.car.place(s.pos.x, s.pos.z, s.yaw, this.world);
@@ -208,6 +220,7 @@ class Game {
       else if (inp.garage) { if (ui.openPanel === 'garage') ui.closeModal(); else if (!ui.isOpen) ui.openGarage(); }
       else if (inp.map) { if (ui.openPanel === 'map') ui.closeModal(); else if (!ui.isOpen) ui.openMap(); }
       else if (inp.help && !ui.isOpen) ui.openHelp();
+      else if (inp.jobs) { if (ui.openPanel === 'jobs') ui.closeModal(); else if (!ui.isOpen) { ui.openModal('jobs', ''); this.missions.renderBoard(); } }
     }
 
     const car = this.car;
@@ -215,7 +228,7 @@ class Game {
       if (inp.camera) this.cameraMode = (this.cameraMode + 1) % 3;
       if (inp.reset) this.resetCar();
       if (inp.horn) this.audio.horn();
-      const frozen = this.activities.frozen;
+      const frozen = this.activities.frozen || this.missions.frozen;
       const ci = frozen ? { steer: 0, throttle: 0, brake: 1, handbrake: false, nitro: false } : inp;
       car.throttle = ci.throttle;
       // regional snow: the north is always snowy-ish
@@ -232,6 +245,13 @@ class Game {
       this.handleCarEvents();
       this.world.updateProps(dt);
       this.activities.update(dt, car, inp);
+      this.missions.update(dt, inp);
+      this.gpsTimer = (this.gpsTimer || 0) - dt;
+      if (this.gpsTimer <= 0) {
+        this.gpsTimer = 1.2;
+        const tp = this.currentTarget();
+        this.gps = tp ? this.graph.gpsLine(car.pos.x, car.pos.z, tp.x, tp.z) : null;
+      }
       this.env.update(dt, car.pos, this.camera, regionSnow);
       this.world.setNight(this.env.nightFactor);
       car.headlight.intensity = this.env.nightFactor > 0.3 || this.env.cur.fog > 0.004 ? 80 : 0;
@@ -253,12 +273,6 @@ class Game {
       if (this.saveTimer > 10) { this.saveTimer = 0; this.state.save(); }
       // waypoint arrival
       if (this.waypoint && Math.hypot(this.waypoint.x - car.pos.x, this.waypoint.z - car.pos.z) < 25) { this.waypoint = null; ui.toast('Waypoint reached'); }
-      if (!this.activities.current && this.waypoint) {
-        const a = this.activities.arrow;
-        a.visible = this.cameraMode !== 2;
-        a.position.set(car.pos.x, car.pos.y + 3.6, car.pos.z);
-        a.rotation.set(0, Math.atan2(this.waypoint.x - car.pos.x, this.waypoint.z - car.pos.z), 0);
-      }
     } else {
       this.env.update(0, car.pos, this.camera, 0);
     }

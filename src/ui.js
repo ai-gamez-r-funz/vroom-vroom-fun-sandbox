@@ -140,9 +140,16 @@ export class UI {
       g.fillStyle = color; g.strokeStyle = '#000'; g.lineWidth = 1.5;
       g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill(); g.stroke();
     };
+    const gps = this.game.gps;
+    if (gps && gps.length > 1) {
+      g.strokeStyle = 'rgba(80,200,255,0.9)'; g.lineWidth = 4; g.lineJoin = 'round';
+      g.beginPath();
+      gps.forEach((p, i) => { const [sx, sy] = toScreen(p.x, p.z); i ? g.lineTo(sx, sy) : g.moveTo(sx, sy); });
+      g.stroke();
+    }
     const cols = { race: '#ffd23f', challenge: '#ff4fd8', delivery: '#3fff8a', property: '#3fa9ff' };
     for (const a of activities.list) dot(a.x, a.z, a.type === 'property' && a.owned ? '#9fd4ff' : cols[a.type]);
-    const tp = activities.targetPoint() || this.game.waypoint;
+    const tp = this.game.currentTarget();
     if (tp) dot(tp.x, tp.z, '#fff', 6, true);
     // player arrow
     g.fillStyle = '#fff'; g.strokeStyle = '#000';
@@ -263,6 +270,8 @@ export class UI {
       case 'help': this.openHelp(); break;
       case 'map': this.openMap(); break;
       case 'clearwp': g.waypoint = null; this.renderMap(); break;
+      case 'jobs': this.openModal('jobs', ''); g.missions.renderBoard(); break;
+      default: if (act.startsWith('m-')) g.missions.onAct(act, arg, el);
     }
   }
 
@@ -283,6 +292,8 @@ export class UI {
       <tr><td><kbd>Shift</kbd></td><td>Nitro</td></tr>
       <tr><td><kbd>E</kbd></td><td>Start event / enter garage at markers</td></tr>
       <tr><td><kbd>G</kbd></td><td>Garage (buy cars, upgrades, paint)</td></tr>
+      <tr><td><kbd>J</kbd></td><td>Job board, story jobs &amp; Mission Forge</td></tr>
+      <tr><td><kbd>Y</kbd> / <kbd>N</kbd></td><td>Accept / ignore a job offer that pops up while driving</td></tr>
       <tr><td><kbd>M</kbd></td><td>World map, waypoints &amp; fast travel</td></tr>
       <tr><td><kbd>C</kbd> / <kbd>B</kbd></td><td>Change camera / look back</td></tr>
       <tr><td><kbd>R</kbd></td><td>Reset car to road</td></tr>
@@ -310,6 +321,7 @@ export class UI {
     this.openModal('pause', `<h2>Paused</h2>
       <div class="menu-buttons">
         <button class="primary" data-act="close">Resume</button>
+        <button data-act="jobs">Jobs &amp; Mission Forge</button>
         <button data-act="garage">Garage</button>
         <button data-act="map">Map</button>
         <button data-act="settings">Settings</button>
