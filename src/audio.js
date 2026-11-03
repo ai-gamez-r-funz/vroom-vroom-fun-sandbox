@@ -100,6 +100,25 @@ export class Audio {
     o.connect(g); g.connect(this.master);
     o.start(t0); o.stop(t0 + dur + 0.02);
   }
+  // Two-tone siren for police pursuits (an LFO sweeps a square wave).
+  siren(on) {
+    if (!this.ctx) return;
+    if (on && !this.sirenOsc) {
+      const ctx = this.ctx;
+      const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = 750;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.8;
+      const lg = ctx.createGain(); lg.gain.value = 180;
+      lfo.connect(lg); lg.connect(o.frequency);
+      const g = ctx.createGain(); g.gain.value = 0.035;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800;
+      o.connect(f); f.connect(g); g.connect(this.master);
+      o.start(); lfo.start();
+      this.sirenOsc = { o, lfo };
+    } else if (!on && this.sirenOsc) {
+      this.sirenOsc.o.stop(); this.sirenOsc.lfo.stop();
+      this.sirenOsc = null;
+    }
+  }
   beep(f) { this.tone(f, 0.15, 'square', 0.1); }
   chime() { [880, 1108, 1320].forEach((f, i) => this.tone(f, 0.25, 'triangle', 0.15, i * 0.07)); }
   cash() { [1320, 1760].forEach((f, i) => this.tone(f, 0.12, 'triangle', 0.12, i * 0.06)); }

@@ -149,3 +149,34 @@ label { display: flex; gap: 10px; align-items: center; }
 .map-side p { color: var(--muted); margin: 4px 0; }
 .legend { display: flex; flex-wrap: wrap; }
 @media (max-width: 720px) { .map-wrap { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------ missions */
+#offer { top: 50%; right: 16px; transform: translateY(-50%); width: min(340px, 86vw); background: var(--bg); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; padding: 12px 14px; display: none; pointer-events: auto; animation: toastIn 0.35s ease-out; backdrop-filter: blur(4px); }
+.offer-head { font-size: 12px; color: var(--muted); }
+.offer-title { font: 800 18px/1.3 system-ui; margin: 4px 0; }
+.offer-desc { font-size: 13px; line-height: 1.4; }
+.offer-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.offer-btns { display: flex; gap: 8px; margin-top: 10px; }
+.offer-btns button { flex: 1; }
+.offer-timer { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+.offer-timer i { display: block; height: 100%; background: var(--accent); }
+#activity .obj { font-size: 14px; margin: 2px 0 4px; }
+.act-big.small { font-size: 22px; }
+.mbar { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; font-size: 11px; font-weight: 700; margin-top: 5px; text-align: left; }
+.mbar > div { height: 8px; background: rgba(255,255,255,0.12); border-radius: 4px; overflow: hidden; min-width: 160px; }
+.mbar i { display: block; height: 100%; background: #7cc4ff; transition: width 0.15s; }
+.mbar.good i { background: var(--good); } .mbar.bad i { background: var(--bad); } .mbar.warn i { background: var(--challenge); }
+#activity .good { color: var(--good); }
+.muted { color: var(--muted); font-size: 13px; }
+.mcard .cls { font-size: 12px; }
+.forge-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.forge-controls select, .forge-controls input[type=number] { background: #232c3a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.forge-preview { background: rgba(255,255,255,0.04); border-radius: 10px; padding: 10px 14px; margin: 10px 0; }
+.forge-preview h3 { margin: 0 0 4px; color: var(--text); text-transform: none; letter-spacing: 0; }
+.forge-preview ol { margin: 6px 0; padding-left: 20px; font-size: 13px; }
+#forge-json { width: 100%; min-height: 220px; background: #0d121a; color: #cfe3ff; border: 1px solid var(--line); border-radius: 8px; font: 12px/1.4 ui-monospace, monospace; padding: 10px; resize: vertical; }
+.rule { padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.rule.on { color: var(--text); }
+.rule.on b { color: var(--good); }
+.rule small { display: block; font-family: ui-monospace, monospace; }
+@media (pointer: coarse) { #offer { top: auto; bottom: 120px; transform: none; } }

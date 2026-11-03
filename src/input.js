@@ -35,6 +35,7 @@ export class Input {
     bind('[data-t=hand]', () => (t.handbrake = true), () => (t.handbrake = false));
     bind('[data-t=nitro]', () => (t.nitro = true), () => (t.nitro = false));
     bind('[data-t=use]', () => this.pressed.add('KeyE'), () => {});
+    bind('[data-t=jobs]', () => this.pressed.add('KeyJ'), () => {});
   }
 
   down(...codes) { return codes.some((c) => this.keys.has(c)); }
@@ -58,6 +59,9 @@ export class Input {
     s.horn = this.hit('KeyH');
     s.lookBack = this.down('KeyB');
     s.help = this.hit('F1', 'Slash');
+    s.accept = this.hit('KeyY');
+    s.decline = this.hit('KeyN');
+    s.jobs = this.hit('KeyJ');
 
     // Gamepad (standard mapping)
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -83,6 +87,8 @@ export class Input {
       if (edge(4)) s.reset = true; // LB
       if (edge(12)) s.garage = true; // D-pad up
       if (edge(13)) s.cancel = true; // D-pad down
+      if (edge(15)) s.accept = true; // D-pad right
+      if (edge(14)) s.decline = true; // D-pad left
     }
     s.steer = Math.max(-1, Math.min(1, s.steer));
     this.pressed.clear();

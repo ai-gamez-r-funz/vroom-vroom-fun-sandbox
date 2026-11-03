@@ -250,6 +250,7 @@ export class Activities {
     }
 
     if (this.current) this.updateCurrent(dt, car, input);
+    else if (this.game.missions && this.game.missions.active) this.prompt = null;
     else this.updatePrompt(car, input);
     this.updateArrow(car, t);
   }
@@ -475,7 +476,7 @@ export class Activities {
   }
 
   updateArrow(car, t) {
-    const tp = this.targetPoint();
+    const tp = this.game.currentTarget();
     if (!tp || this.game.cameraMode === 2) { this.arrow.visible = false; return; }
     this.arrow.visible = true;
     this.arrow.position.set(car.pos.x, car.pos.y + 3.6 + Math.sin(t * 4) * 0.1, car.pos.z);
