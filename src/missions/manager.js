@@ -123,7 +123,7 @@ export class MissionManager {
       return;
     }
     // Offers only during free roam
-    if (g.activities.current) { if (this.offer) { this.offer = null; this.renderOffer(); } return; }
+    if (g.activities.current || g.racing.active) { if (this.offer) { this.offer = null; this.renderOffer(); } return; }
     if (this.offer) {
       this.offer.t -= dt;
       if (input.accept) { this.acceptOffer(); return; }

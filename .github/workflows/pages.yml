@@ -27,7 +27,7 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p _site
-          cp -r index.html style.css src vendor assets _site/
+          cp -r index.html style.css src shared vendor assets _site/
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

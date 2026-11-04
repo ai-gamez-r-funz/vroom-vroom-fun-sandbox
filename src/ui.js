@@ -30,6 +30,17 @@ export class UI {
     game.state.onChange(() => this.updateTop());
     this.updateTop();
     this.modal.addEventListener('click', (e) => this.onModalClick(e));
+    // Any element with data-key acts like pressing that key (touch menu bar, Quit buttons...)
+    document.addEventListener('click', (e) => {
+      const k = e.target.closest('[data-key]');
+      if (k) { e.preventDefault(); game.input.pressed.add(k.dataset.key); }
+      const d = e.target.closest('[data-dismiss]');
+      if (d) d.parentElement.remove();
+    });
+    // Activity panel: tap the title to collapse it on small screens
+    this.activity.addEventListener('click', (e) => {
+      if (!e.target.closest('.act-quit')) this.activity.classList.toggle('mini');
+    });
     this.modal.addEventListener('input', (e) => this.onModalInput(e));
   }
 
@@ -95,7 +106,13 @@ export class UI {
     this.prompt.style.display = html ? 'block' : 'none';
   }
   setActivity(html) {
-    this.activity.innerHTML = html || '';
+    // Only the body is re-rendered each frame; the Quit button stays put so taps on it register.
+    if (!this.actBody) {
+      this.activity.innerHTML = '<div class="act-body"></div><button class="act-quit" data-key="Backspace">✕ Quit</button>';
+      this.actBody = this.activity.firstChild;
+    }
+    if (html && html !== this._actHtml) this.actBody.innerHTML = html;
+    this._actHtml = html;
     this.activity.style.display = html ? 'block' : 'none';
   }
   setBanner(text) {
@@ -140,6 +157,7 @@ export class UI {
       g.fillStyle = color; g.strokeStyle = '#000'; g.lineWidth = 1.5;
       g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill(); g.stroke();
     };
+    if (Math.hypot(car.pos.x - 0, car.pos.z - 860) < viewR + 500) this.game.motorpark.drawMinimap(g, toScreen);
     const gps = this.game.gps;
     if (gps && gps.length > 1) {
       g.strokeStyle = 'rgba(80,200,255,0.9)'; g.lineWidth = 4; g.lineJoin = 'round';
@@ -147,8 +165,9 @@ export class UI {
       gps.forEach((p, i) => { const [sx, sy] = toScreen(p.x, p.z); i ? g.lineTo(sx, sy) : g.moveTo(sx, sy); });
       g.stroke();
     }
-    const cols = { race: '#ffd23f', challenge: '#ff4fd8', delivery: '#3fff8a', property: '#3fa9ff' };
+    const cols = { race: '#ffd23f', challenge: '#ff4fd8', delivery: '#3fff8a', property: '#3fa9ff', motorpark: '#ff3b3b', arena: '#ff8a00' };
     for (const a of activities.list) dot(a.x, a.z, a.type === 'property' && a.owned ? '#9fd4ff' : cols[a.type]);
+    for (const d of this.game.extraDots()) dot(d.x, d.z, d.color, 4);
     const tp = this.game.currentTarget();
     if (tp) dot(tp.x, tp.z, '#fff', 6, true);
     // player arrow
@@ -167,12 +186,14 @@ export class UI {
     this.openPanel = name;
     this.modal.innerHTML = `<div class="panel ${name}">${html}</div>`;
     this.modal.style.display = 'flex';
+    document.body.classList.add('modal-open');
     this.game.setPaused(true);
   }
 
   closeModal() {
     this.openPanel = null;
     this.modal.style.display = 'none';
+    document.body.classList.remove('modal-open');
     this.modal.innerHTML = '';
     this.game.setPaused(false);
   }
@@ -271,7 +292,9 @@ export class UI {
       case 'map': this.openMap(); break;
       case 'clearwp': g.waypoint = null; this.renderMap(); break;
       case 'jobs': this.openModal('jobs', ''); g.missions.renderBoard(); break;
-      default: if (act.startsWith('m-')) g.missions.onAct(act, arg, el);
+      default:
+        if (act.startsWith('m-')) g.missions.onAct(act, arg, el);
+        else if (act.startsWith('r-') || act.startsWith('d-')) g.racing.onAct(act, arg, el);
     }
   }
 
@@ -454,7 +477,7 @@ export class UI {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(g.world.mapCanvas, 0, 0, S, S);
     const tm = (v) => ((v + WORLD_HALF) / (WORLD_HALF * 2)) * S;
-    const cols = { race: '#ffd23f', challenge: '#ff4fd8', delivery: '#3fff8a', property: '#3fa9ff' };
+    const cols = { race: '#ffd23f', challenge: '#ff4fd8', delivery: '#3fff8a', property: '#3fa9ff', motorpark: '#ff3b3b', arena: '#ff8a00' };
     ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
     for (const a of g.activities.list) {

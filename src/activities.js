@@ -2,8 +2,9 @@
 import * as THREE from 'three';
 import { mulberry32, clamp, formatTime, formatMoney, wrapAngle } from './util.js';
 import { CITY_HALF, LAKE, SURF } from './world.js';
+import { MOTORPARK, ARENA } from '../shared/tracks.js';
 
-const COLORS = { race: 0xffd23f, challenge: 0xff4fd8, delivery: 0x3fff8a, property: 0x3fa9ff, owned: 0x9fd4ff };
+const COLORS = { race: 0xffd23f, challenge: 0xff4fd8, delivery: 0x3fff8a, property: 0x3fa9ff, owned: 0x9fd4ff, motorpark: 0xff3b3b, arena: 0xff8a00 };
 
 export const PROPERTIES = [
   { id: 'home', name: 'Downtown Garage', x: 40, z: 52, price: 0, income: 0, yaw: Math.PI, desc: 'Your first garage. Home sweet home.' },
@@ -89,6 +90,10 @@ export class Activities {
       const gold = len / r.ref;
       this.add({ type: 'race', ...r, startYaw, length: len, medals: [gold, gold * 1.15, gold * 1.35], reward: Math.round(400 + len * 0.9), x: r.start[0], z: r.start[1] });
     }
+
+    // ---------------- Motorpark circuit racing & derby arena (always available) ----------------
+    this.add({ type: 'motorpark', id: 'motorpark', name: MOTORPARK.name, x: MOTORPARK.x, z: MOTORPARK.z - MOTORPARK.halfD + 14, desc: 'Circuit racing against AI opponents.' });
+    this.add({ type: 'arena', id: 'arena', name: ARENA.name, x: ARENA.x - ARENA.r - 14, z: ARENA.z, desc: 'Demolition derby.' });
 
     // ---------------- challenges ----------------
     this.add({ type: 'challenge', kind: 'air', id: 'bigair', name: 'Big Air', x: 440, z: 205, duration: 75, targets: [1.6, 2.4, 3.4], unit: 's', reward: 1500, desc: 'Longest single airtime in the stunt park. Use the ramps!' });
@@ -187,7 +192,7 @@ export class Activities {
     const y = this.world.heightAt(a.x, a.z);
     a.marker = makeMarker(color, a.type === 'property' ? 5 : 6);
     a.marker.position.set(a.x, y, a.z);
-    const icon = { race: '🏁', challenge: '★', delivery: '📦', property: '🏠' }[a.type];
+    const icon = { race: '⏱', challenge: '★', delivery: '📦', property: '🏠', motorpark: '🏁', arena: '💥' }[a.type];
     a.label = makeLabel(`${icon} ${a.name}`);
     a.label.position.set(a.x, y + 12, a.z);
     this.scene.add(a.marker, a.label);
@@ -250,7 +255,7 @@ export class Activities {
     }
 
     if (this.current) this.updateCurrent(dt, car, input);
-    else if (this.game.missions && this.game.missions.active) this.prompt = null;
+    else if ((this.game.missions && this.game.missions.active) || this.game.racing?.active) { this.prompt = null; this.game.ui.setPrompt(null); }
     else this.updatePrompt(car, input);
     this.updateArrow(car, t);
   }
@@ -265,7 +270,9 @@ export class Activities {
     const ui = this.game.ui;
     if (!best) { ui.setPrompt(null); return; }
     let text;
-    if (best.type === 'race') text = `Race: <b>${best.name}</b> — ${(best.length / 1000).toFixed(1)} km · Gold ${formatTime(best.medals[0])}`;
+    if (best.type === 'motorpark') text = `<b>${best.name}</b> — Circuit racing vs AI, 5 track layouts`;
+    else if (best.type === 'arena') text = `<b>${best.name}</b> — Demolition derby. Last car running wins!`;
+    else if (best.type === 'race') text = `Time Trial: <b>${best.name}</b> — ${(best.length / 1000).toFixed(1)} km · Gold ${formatTime(best.medals[0])}`;
     else if (best.type === 'challenge') text = `Challenge: <b>${best.name}</b> — ${best.desc}`;
     else if (best.type === 'delivery') text = `<b>${best.name}</b> — Start a delivery job`;
     else if (best.type === 'property') text = best.owned ? `<b>${best.name}</b> — Open garage` : `<b>${best.name}</b> — Buy for ${formatMoney(best.prop.price)} (+${formatMoney(best.prop.income)}/day)`;
@@ -281,6 +288,8 @@ export class Activities {
       return;
     }
     g.ui.setPrompt(null);
+    if (a.type === 'motorpark') { g.racing.openSetup(); return; }
+    if (a.type === 'arena') { g.racing.openDerbySetup(); return; }
     if (a.type === 'race') this.startRace(a);
     else if (a.type === 'challenge') this.startChallenge(a);
     else if (a.type === 'delivery') this.startDelivery(a);
@@ -380,7 +389,7 @@ export class Activities {
       g.ui.setActivity(`<div class="act-title">🏁 ${a.name}</div><div class="act-big">${formatTime(c.time)}</div>
         <div>Checkpoint ${c.cp + 1}/${c.cps.length}</div>
         <div class="act-medals"><span class="gold">${formatTime(a.medals[0])}</span><span class="silver">${formatTime(a.medals[1])}</span><span class="bronze">${formatTime(a.medals[2])}</span></div>
-        <div class="act-hint">Best: ${formatTime(g.state.data.best[a.id] ?? Infinity)} · <kbd>Backspace</kbd> quit</div>`);
+        <div class="act-hint">Best: ${formatTime(g.state.data.best[a.id] ?? Infinity)} </div>`);
     } else if (c.kind === 'delivery') {
       c.time -= dt;
       const d = Math.hypot(c.dest.x - car.pos.x, c.dest.z - car.pos.z);
@@ -392,7 +401,7 @@ export class Activities {
         return;
       }
       g.ui.setActivity(`<div class="act-title">📦 ${c.cargo} → ${c.dest.name}</div><div class="act-big ${c.time < 0 ? 'late' : ''}">${formatTime(Math.max(0, c.time))}</div>
-        <div>${Math.round(d)} m to go · Cargo ${Math.round(c.condition)}%</div><div>Pay ${formatMoney(c.pay)}${c.time < 0 ? ' (late!)' : ''}</div><div class="act-hint"><kbd>Backspace</kbd> abandon</div>`);
+        <div>${Math.round(d)} m to go · Cargo ${Math.round(c.condition)}%</div><div>Pay ${formatMoney(c.pay)}${c.time < 0 ? ' (late!)' : ''}</div>`);
     } else {
       // challenges
       c.time -= dt;

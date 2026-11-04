@@ -35,7 +35,7 @@ export class Input {
     bind('[data-t=hand]', () => (t.handbrake = true), () => (t.handbrake = false));
     bind('[data-t=nitro]', () => (t.nitro = true), () => (t.nitro = false));
     bind('[data-t=use]', () => this.pressed.add('KeyE'), () => {});
-    bind('[data-t=jobs]', () => this.pressed.add('KeyJ'), () => {});
+    bind('[data-t=yes]', () => this.pressed.add('KeyY'), () => {});
   }
 
   down(...codes) { return codes.some((c) => this.keys.has(c)); }
