@@ -10,3 +10,8 @@ export const USE_KENNEY_CARS = false;
 
 // If a Kenney model faces backwards in-game, add its file name here.
 export const KENNEY_FLIP = new Set([]);
+
+// Multiplayer server address (wss://... for an https site such as GitHub Pages).
+// Leave empty to let players type one in; on localhost the game tries ws://localhost:8787.
+// Can also be supplied per-link with ?server=wss://your-server.example
+export const MP_SERVER_URL = '';

@@ -1,6 +1,7 @@
 // Procedural open world: heightmap terrain with biomes, roads, city, props and colliders.
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, fbm, mulberry32 } from './util.js';
+import { motorparkMask, MOTORPARK } from '../shared/tracks.js';
 
 export const WORLD_HALF = 1200;
 const CELL = 4;
@@ -60,6 +61,8 @@ function rawHeight(x, z) {
   const c = 1 - smoothstep(330, 430, m);
   h = lerp(h, 2, c);
   h += smoothstep(960, 1180, m) * (115 + fbm(x / 90, z / 90, 3) * 70);
+  const mp = motorparkMask(x, z);
+  if (mp > 0) h = lerp(h, MOTORPARK.height, mp);
   return h;
 }
 
@@ -132,6 +135,12 @@ function buildRoadPaths() {
   const rw = [];
   for (let i = 0; i <= 100; i++) rw.push(new THREE.Vector2(280 + i * 3.6, 520));
   roads.push({ name: 'Airfield Runway', pts: resample(rw, 4, false), closed: false, width: 30, type: SURF.ASPHALT, lanes: 0, runway: true });
+
+  // Access road from the ring highway down to the Motorpark
+  const hj = nearestOnHw(MOTORPARK.x, MOTORPARK.z - MOTORPARK.halfD);
+  const access = [];
+  for (let i = 0; i <= 20; i++) { const t = i / 20; access.push(new THREE.Vector2(hj.x + (MOTORPARK.x - hj.x) * t, hj.y + (MOTORPARK.z - MOTORPARK.halfD + 12 - hj.y) * t)); }
+  roads.push({ name: 'Motorpark Way', pts: resample(access, 4, false), closed: false, width: 14, type: SURF.ASPHALT, lanes: 1 });
   return roads;
 }
 
@@ -276,6 +285,7 @@ export class World {
         const b = biomeWeights(x, z);
         if (blend[id] < 0.12) s = roadType[id];
         else if (Math.abs(x) <= CITY_HALF + 8 && Math.abs(z) <= CITY_HALF + 8) s = SURF.CONCRETE;
+        else if (motorparkMask(x, z) > 0.5) s = SURF.CONCRETE;
         else if (h < 0.4) s = SURF.WATER;
         else if (h < 2.6 && Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 90) s = SURF.SAND;
         else if (slope > 0.85) s = SURF.ROCK;
@@ -834,64 +844,76 @@ export class World {
       // airfield end: big launch
       { x: 640, z: 520, yaw: Math.PI / 2, w: 14, len: 36, h: 12, kind: 'kicker' },
     ];
-    const mat = new THREE.MeshLambertMaterial({ color: 0xd8b03a });
-    const stripe = new THREE.MeshLambertMaterial({ color: 0x2b2b2b });
-    for (const d of defs) {
-      const L = d.len, H = d.h;
-      let profile, shapePts;
-      if (d.kind === 'kicker') {
-        profile = (lz) => (lz < -L / 2 || lz > L / 2 ? 0 : H * Math.pow((lz + L / 2) / L, 1.25));
-        shapePts = [];
-        for (let i = 0; i <= 12; i++) {
-          const lz = -L / 2 + (i / 12) * L;
-          shapePts.push([lz, profile(lz)]);
-        }
-        shapePts.push([L / 2, 0]);
-      } else {
-        const up = L * 0.3, top = L * 0.4;
-        profile = (lz) => {
-          const t = lz + L / 2;
-          if (t < 0 || t > L) return 0;
-          if (t < up) return (H * t) / up;
-          if (t < up + top) return H;
-          return H * (1 - (t - up - top) / up);
-        };
-        shapePts = [[-L / 2, 0], [-L / 2 + up, H], [-L / 2 + up + top, H], [L / 2, 0]];
+    for (const d of defs) this.addRamp(d);
+  }
+
+  // Add a ramp: { x, z, yaw, w, len, h, kind: 'kicker' | 'table' }. Returns the ramp (with .mesh).
+  addRamp(d) {
+    this.rampMat = this.rampMat || new THREE.MeshLambertMaterial({ color: 0xd8b03a });
+    this.rampStripe = this.rampStripe || new THREE.MeshLambertMaterial({ color: 0x2b2b2b });
+    const L = d.len, H = d.h;
+    let profile, shapePts;
+    if (d.kind === 'kicker') {
+      profile = (lz) => (lz < -L / 2 || lz > L / 2 ? 0 : H * Math.pow((lz + L / 2) / L, 1.25));
+      shapePts = [];
+      for (let i = 0; i <= 12; i++) {
+        const lz = -L / 2 + (i / 12) * L;
+        shapePts.push([lz, profile(lz)]);
       }
-      // Ramp base sits at the lowest terrain point under it
-      let base = Infinity;
-      const cs = Math.cos(d.yaw), sn = Math.sin(d.yaw);
-      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
-        const lx = (a * d.w) / 2, lz = (b * L) / 2;
-        const wx = d.x + lx * cs + lz * sn, wz = d.z - lx * sn + lz * cs;
-        base = Math.min(base, this.terrainHeight(wx, wz));
-      }
-      const shape = new THREE.Shape();
-      shape.moveTo(shapePts[0][0], -0.5);
-      for (const p of shapePts) shape.lineTo(p[0], p[1]);
-      shape.lineTo(L / 2, -0.5);
-      const geo = new THREE.ExtrudeGeometry(shape, { depth: d.w, bevelEnabled: false });
-      geo.translate(0, 0, -d.w / 2);
-      geo.rotateY(-Math.PI / 2);
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(d.x, base, d.z);
-      mesh.rotation.y = d.yaw;
-      mesh.castShadow = mesh.receiveShadow = true;
-      this.scene.add(mesh);
-      // chevron stripes on the side
-      const sideGeo = new THREE.BoxGeometry(0.15, 0.4, L * 0.9);
-      for (const s of [-1, 1]) {
-        const sm = new THREE.Mesh(sideGeo, stripe);
-        sm.position.set((s * d.w) / 2, 0.3, 0);
-        mesh.add(sm);
-      }
-      // physics: local frame where lz is along ramp direction (forward = sin/cos yaw)
-      this.ramps.push({
-        x: d.x, z: d.z, y: base, w: d.w, len: L, h: H, profile, yaw: d.yaw,
-        // lx = dx*cos - dz*sin ; lz = dx*sin + dz*cos
-        cos: cs, sin: sn, bound2: (L / 2 + d.w) ** 2,
-      });
+      shapePts.push([L / 2, 0]);
+    } else {
+      const up = L * 0.3, top = L * 0.4;
+      profile = (lz) => {
+        const t = lz + L / 2;
+        if (t < 0 || t > L) return 0;
+        if (t < up) return (H * t) / up;
+        if (t < up + top) return H;
+        return H * (1 - (t - up - top) / up);
+      };
+      shapePts = [[-L / 2, 0], [-L / 2 + up, H], [-L / 2 + up + top, H], [L / 2, 0]];
     }
+    // Ramp base sits at the lowest terrain point under it
+    let base = Infinity;
+    const cs = Math.cos(d.yaw), sn = Math.sin(d.yaw);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const lx = (a * d.w) / 2, lz = (b * L) / 2;
+      const wx = d.x + lx * cs + lz * sn, wz = d.z - lx * sn + lz * cs;
+      base = Math.min(base, this.terrainHeight(wx, wz));
+    }
+    const shape = new THREE.Shape();
+    shape.moveTo(shapePts[0][0], -0.5);
+    for (const p of shapePts) shape.lineTo(p[0], p[1]);
+    shape.lineTo(L / 2, -0.5);
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: d.w, bevelEnabled: false });
+    geo.translate(0, 0, -d.w / 2);
+    geo.rotateY(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, this.rampMat);
+    mesh.position.set(d.x, base, d.z);
+    mesh.rotation.y = d.yaw;
+    mesh.castShadow = mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    // chevron stripes on the side
+    const sideGeo = new THREE.BoxGeometry(0.15, 0.4, L * 0.9);
+    for (const s of [-1, 1]) {
+      const sm = new THREE.Mesh(sideGeo, this.rampStripe);
+      sm.position.set((s * d.w) / 2, 0.3, 0);
+      mesh.add(sm);
+    }
+    // physics: local frame where lz is along ramp direction (forward = sin/cos yaw)
+    const r = {
+      x: d.x, z: d.z, y: base, w: d.w, len: L, h: H, profile, yaw: d.yaw,
+      // lx = dx*cos - dz*sin ; lz = dx*sin + dz*cos
+      cos: cs, sin: sn, bound2: (L / 2 + d.w) ** 2, mesh,
+    };
+    this.ramps.push(r);
+    return r;
+  }
+
+  removeRamp(r) {
+    const i = this.ramps.indexOf(r);
+    if (i >= 0) this.ramps.splice(i, 1);
+    this.scene.remove(r.mesh);
+    r.mesh.geometry.dispose();
   }
 
   buildVegetation() {
@@ -908,6 +930,7 @@ export class World {
       for (const r of this.ramps) if (Math.hypot(x - r.x, z - r.z) < r.len) return null;
       if (Math.hypot(x - 520, z - 200) < 140) return null; // stunt park
       if (x > 260 && x < 680 && Math.abs(z - 520) < 40) return null; // airfield
+      if (motorparkMask(x, z) > 0.01) return null; // Motorpark & arena
       return { s, h: this.H[id] };
     };
     for (let k = 0; k < 9000; k++) {
@@ -970,21 +993,15 @@ export class World {
   buildProps() {
     // Knockable props: traffic cones, barrels, crates, hay bales.
     const rnd = mulberry32(777);
-    const types = {
+    const types = (this.propTypes = {
       cone: { geo: new THREE.ConeGeometry(0.3, 0.8, 8).translate(0, 0.4, 0), mat: new THREE.MeshLambertMaterial({ color: 0xff6a1a }), r: 0.35, mass: 4, h: 0.8 },
       barrel: { geo: new THREE.CylinderGeometry(0.45, 0.45, 1.1, 10).translate(0, 0.55, 0), mat: new THREE.MeshLambertMaterial({ color: 0x2c6fbf }), r: 0.5, mass: 25, h: 1.1 },
       crate: { geo: new THREE.BoxGeometry(1.1, 1.1, 1.1).translate(0, 0.55, 0), mat: new THREE.MeshLambertMaterial({ color: 0xa87a45 }), r: 0.6, mass: 35, h: 1.1 },
       hay: { geo: new THREE.CylinderGeometry(0.8, 0.8, 1.2, 12).rotateZ(Math.PI / 2).translate(0, 0.8, 0), mat: new THREE.MeshLambertMaterial({ color: 0xd9bf5a }), r: 0.85, mass: 60, h: 1.6 },
-    };
-    const add = (type, x, z) => {
-      const t = types[type];
-      const mesh = new THREE.Mesh(t.geo, t.mat);
-      mesh.castShadow = true;
-      const y = this.heightAt(x, z);
-      mesh.position.set(x, y, z);
-      this.scene.add(mesh);
-      this.props.push({ type, mesh, home: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), spin: new THREE.Vector3(), r: t.r, mass: t.mass, h: t.h, hit: false, timer: 0 });
-    };
+      tires: { geo: new THREE.CylinderGeometry(0.55, 0.55, 1.2, 10).translate(0, 0.6, 0), mat: new THREE.MeshLambertMaterial({ color: 0x1d1d1f }), r: 0.6, mass: 40, h: 1.2 },
+    });
+    void types;
+    const add = (type, x, z) => this.addProp(type, x, z);
     // Cone slaloms in the city and stunt park
     for (let i = 0; i < 12; i++) add('cone', 37 + 1.5 * (i % 2 ? 1 : -1), -20 - i * 4);
     for (let i = 0; i < 10; i++) add('cone', -225 + (i % 2 ? 2 : -2), 60 + i * 5);
@@ -1008,6 +1025,33 @@ export class World {
       const p = hw.pts[k];
       add('barrel', p.x + 10.5, p.y);
     }
+  }
+
+  // Knockable prop at (x, z). Returns the prop record.
+  addProp(type, x, z) {
+    const t = this.propTypes[type];
+    const mesh = new THREE.Mesh(t.geo, t.mat);
+    mesh.castShadow = true;
+    const y = this.heightAt(x, z);
+    mesh.position.set(x, y, z);
+    this.scene.add(mesh);
+    const p = { type, mesh, home: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), spin: new THREE.Vector3(), r: t.r, mass: t.mass, h: t.h, hit: false, timer: 0 };
+    this.props.push(p);
+    return p;
+  }
+
+  removeProp(p) {
+    const i = this.props.indexOf(p);
+    if (i >= 0) this.props.splice(i, 1);
+    this.scene.remove(p.mesh);
+  }
+
+  // Remove colliders from the spatial hash (used by swappable track layouts).
+  removeColliders(list) {
+    const set = new Set(list);
+    for (const [k, arr] of this.grid) this.grid.set(k, arr.filter((o) => !set.has(o)));
+    this.circles = this.circles.filter((o) => !set.has(o));
+    this.boxes = this.boxes.filter((o) => !set.has(o));
   }
 
   buildMapImage() {

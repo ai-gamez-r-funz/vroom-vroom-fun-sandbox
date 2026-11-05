@@ -68,19 +68,84 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid rgba(255,255,25
 @keyframes toastIn { from { opacity: 0; transform: translateX(30px); } }
 #keyhint { bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.65); text-shadow: 0 1px 2px #000; }
 
-#touch { display: none; }
+#touch, #touchbar, #rotatehint { display: none; }
+#activity { pointer-events: auto; }
+.act-quit { margin-top: 6px; padding: 4px 12px; font-size: 12px; background: rgba(255,90,90,0.2); border-color: rgba(255,90,90,0.5); }
+#activity.mini .act-body > *:not(.act-title):not(.act-big) { display: none; }
+#activity { cursor: pointer; }
+
+/* Touch devices: on-screen pedals, steering and a menu bar */
 @media (pointer: coarse) {
   #touch { display: block; }
-  #touch > div { position: absolute; bottom: 20px; display: flex; gap: 12px; pointer-events: auto; align-items: flex-end; }
-  .tleft { left: 16px; }
-  .tright { right: 16px; flex-wrap: wrap; justify-content: flex-end; max-width: 260px; }
-  #touch button { width: 76px; height: 76px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.35); color: #fff; font-size: 26px; touch-action: none; }
-  #touch button.small { width: 56px; height: 56px; font-size: 14px; }
+  #touch > div { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: 10px; pointer-events: auto; align-items: flex-end; }
+  .tleft { left: max(12px, env(safe-area-inset-left)); }
+  .tright { right: max(12px, env(safe-area-inset-right)); flex-wrap: wrap; justify-content: flex-end; max-width: 250px; }
+  #touch button { width: 74px; height: 74px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.35); color: #fff; font-size: 26px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #touch button.small { width: 52px; height: 52px; font-size: 13px; }
   #touch button.down { background: rgba(255,210,63,0.5); }
-  #minimap { width: 130px; height: 130px; bottom: auto; top: 70px; left: 12px; }
-  #speedo { bottom: auto; top: 60px; right: 12px; width: 150px; }
-  .speed-row #speed { font-size: 40px; }
+  #touchbar { display: flex; position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); gap: 6px; pointer-events: auto; z-index: 11; }
+  #touchbar button { width: 40px; height: 40px; padding: 0; border-radius: 10px; background: rgba(0,0,0,0.45); font-size: 18px; }
+  #topright { top: 54px; }
   #keyhint { display: none; }
+  #prompt kbd { display: none; }
+  #minimap { width: 120px; height: 120px; bottom: auto; top: 64px; left: 12px; }
+  #speedo { bottom: auto; top: 96px; right: 12px; width: 140px; }
+  .speed-row #speed { font-size: 38px; }
+  #offer { top: 96px; bottom: auto; right: 8px; transform: none; }
+  body.modal-open #touchbar { display: none; }
+}
+@media (pointer: coarse) and (orientation: portrait) {
+  #rotatehint { display: block; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg); padding: 14px 18px; border-radius: 12px; z-index: 40; pointer-events: auto; text-align: center; width: min(80vw, 320px); }
+  #rotatehint button { margin-top: 8px; }
+}
+
+/* Small screens (phones): compact HUD so panels don't cover the road */
+@media (max-height: 520px), (max-width: 760px) {
+  #money { font-size: 20px; }
+  .lvl { font-size: 11px; margin-top: 3px; }
+  .xp { width: 80px; }
+  #topright { font-size: 12px; }
+  #activity { top: 8px; left: 50%; min-width: 0; width: min(250px, 44vw); padding: 6px 10px; font-size: 11px; border-radius: 10px; }
+  .act-title { font-size: 12px; }
+  .act-big { font-size: 22px; }
+  #activity .obj { font-size: 11px; }
+  .act-medals, .act-hint { font-size: 10px; }
+  .mbar { font-size: 9px; margin-top: 3px; }
+  .mbar > div { min-width: 70px; height: 6px; }
+  #prompt { bottom: auto; top: 40%; font-size: 12px; padding: 6px 10px; max-width: 60vw; }
+  #toasts { top: 150px; right: 8px; max-width: 42vw; gap: 4px; }
+  .toast { font-size: 11px; padding: 5px 8px; }
+  .toast:nth-last-child(n+4) { display: none; }
+  #offer { width: min(300px, 56vw); padding: 8px 10px; }
+  .offer-title { font-size: 14px; }
+  .offer-desc { font-size: 11px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .offer-meta { font-size: 10px; }
+  .offer-btns { margin-top: 6px; }
+  .offer-btns button { padding: 5px; font-size: 12px; }
+  #stunt { font-size: 18px; top: 30%; }
+  #banner { font-size: 72px; }
+  #modal { padding: 0; }
+  .panel { max-height: 100vh; height: 100%; border-radius: 0; padding: 12px 14px; }
+  .panel.title, .panel.result, .panel.property, .panel.pause, .panel.settings, .panel.help { height: auto; max-height: 100vh; border-radius: 12px; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+  .card { padding: 8px; }
+  .title-logo { font-size: 44px; }
+  .result h1 { font-size: 40px; }
+  .result p { font-size: 14px; }
+  .title-help { display: none; }
+  #bigmap { max-height: 70vh; }
+}
+@media (max-height: 520px) and (pointer: coarse) {
+  #minimap { width: 96px; height: 96px; top: auto; bottom: 100px; left: 14px; }
+  #speedo { top: auto; bottom: 100px; right: 16px; width: 120px; }
+  .speed-row #speed { font-size: 30px; }
+  .gear-row { display: none; }
+  #topright { top: 52px; font-size: 11px; }
+  #topright .surface { display: none; }
+  #touch button { width: 64px; height: 64px; font-size: 22px; }
+  #touch button.small { width: 46px; height: 46px; font-size: 12px; }
+  #offer { top: 92px; bottom: auto; width: min(260px, 40vw); }
+  .offer-desc, .offer-head { display: none; }
 }
 
 /* ------------------------------------------------ modals */
@@ -179,4 +244,32 @@ label { display: flex; gap: 10px; align-items: center; }
 .rule.on { color: var(--text); }
 .rule.on b { color: var(--good); }
 .rule small { display: block; font-family: ui-monospace, monospace; }
-@media (pointer: coarse) { #offer { top: auto; bottom: 120px; transform: none; } }
+
+/* ------------------------------------------------ race results */
+.standings { margin: 10px auto; border-collapse: collapse; min-width: 260px; font-size: 14px; }
+.standings td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.standings tr.me td { color: var(--accent); font-weight: 700; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; border: 1px solid rgba(0,0,0,0.5); vertical-align: middle; }
+.act-big small { font-size: 60%; color: var(--muted); }
+
+/* ------------------------------------------------ online */
+.panel.online { max-width: 900px; }
+.panel.online input, .panel.online select { background: #0d121a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; }
+.panel.online label { margin: 8px 0; }
+.panel.online label input { flex: 1; }
+.mode-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.mode-btn { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; }
+.mode-btn small { color: var(--muted); font-weight: 400; font-size: 12px; line-height: 1.35; }
+.room-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.room-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.04); flex-wrap: wrap; }
+.room-row.me { outline: 1px solid var(--accent); }
+.room-row small { color: var(--muted); margin-left: 6px; }
+.room-row button { padding: 4px 8px; font-size: 12px; margin-left: 4px; }
+.mp-settings { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.code b { font: 800 20px ui-monospace, monospace; letter-spacing: 3px; color: var(--accent); margin-left: 6px; }
+.event-banner { background: rgba(255,210,63,0.12); border: 1px solid rgba(255,210,63,0.4); padding: 6px 10px; border-radius: 8px; }
+.mp-chat { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+.mp-chat-log { max-height: 140px; overflow-y: auto; font-size: 13px; line-height: 1.5; }
+.mp-chat input { flex: 1; min-width: 160px; }
+.emotes button { padding: 4px 8px; }
+.teams-score { font: 800 22px system-ui; }

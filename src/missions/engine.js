@@ -436,7 +436,7 @@ export class MissionRunner {
     const cargo = sp.cargo || {};
     if (cargo.kind === 'passenger' && this.stageIdx >= 1) body += bar(`${PERSONA[cargo.personality] || ''} mood`, this.condition / 100, 'good') + (this.tips ? `<div class="act-hint">Tips so far ${formatMoney(this.tips)}</div>` : '');
     else if (['patient', 'fragile', 'cargo'].includes(cargo.kind) && (this.stageIdx >= 1 || this.spec.stages.length === 1)) body += bar(cargo.kind === 'patient' ? 'Patient' : cargo.name, this.condition / 100, 'good');
-    body += `<div class="act-hint"><kbd>Backspace</kbd> abandon</div>`;
+    
     this.game.ui.setActivity(body);
   }
 }

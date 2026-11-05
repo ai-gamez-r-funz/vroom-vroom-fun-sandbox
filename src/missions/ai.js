@@ -59,6 +59,14 @@ export class AIDriver {
   }
 
   startRoute() {
+    if (this.opts.mode === 'track') {
+      // follow a closed racing line, starting from the nearest point ahead of us
+      const loop = this.opts.loop;
+      let bi = 0, bd = Infinity;
+      loop.forEach((q, i) => { const d = (q.x - this.car.pos.x) ** 2 + (q.z - this.car.pos.z) ** 2; if (d < bd) { bd = d; bi = i; } });
+      this.queue = loop.slice(bi + 1).concat(loop);
+      return;
+    }
     const g = this.game.graph;
     const c = this.car.pos;
     // choose the node ahead of us to start from
@@ -116,10 +124,11 @@ export class AIDriver {
     const p = car.pos;
     let target;
     if (this.opts.mode === 'pursue') {
-      const pl = this.game.car;
-      const d = Math.hypot(pl.pos.x - p.x, pl.pos.z - p.z);
+      const pl = this.opts.target ? this.opts.target(this) : this.game.car;
+      if (!pl) { target = { x: p.x, z: p.z }; }
+      const d = pl ? Math.hypot(pl.pos.x - p.x, pl.pos.z - p.z) : 0;
       this.replanT -= dt;
-      if (d < 70) {
+      if (!pl) { /* idle */ } else if (d < 70 || this.opts.direct) {
         // direct chase with lead
         target = { x: pl.pos.x + pl.vel.x * 0.4, z: pl.pos.z + pl.vel.z * 0.4 };
         this.queue.length = 0;
@@ -127,6 +136,7 @@ export class AIDriver {
         if (this.replanT <= 0 || this.queue.length < 3) { this.planPursuit(pl.pos); this.replanT = 1.5; }
       }
     } else if (this.queue.length < 30 && this.opts.mode === 'wander') this.extendWander();
+    else if (this.opts.mode === 'track' && this.queue.length < 60) this.queue.push(...this.opts.loop);
 
     let corner = 1;
     if (!target) {

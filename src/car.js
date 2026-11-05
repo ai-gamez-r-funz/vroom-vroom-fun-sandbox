@@ -333,6 +333,8 @@ export class Car {
     this.steer = damp(this.steer, steerIn, steerRate, dt);
 
     // Nitro
+    // power-up modifiers (multiplayer): turbo boost timer, gravity scale, speed multiplier
+    if (this.boostT > 0) this.boostT -= dt;
     this.nitroOn = input.nitro && this.nitro > 0.05 && input.throttle > 0;
     if (this.nitroOn) this.nitro = Math.max(0, this.nitro - dt);
     else this.nitro = Math.min(s.nitroCap, this.nitro + dt * 0.12);
@@ -352,12 +354,14 @@ export class Car {
       this.grip = grip;
 
       // ---------------- longitudinal ----------------
-      const top = s.topSpeed * (this.nitroOn ? 1.22 : 1);
+      const boosting = this.boostT > 0;
+      const top = s.topSpeed * (this.nitroOn ? 1.22 : 1) * (boosting ? 1.3 : 1) * (this.speedMul ?? 1);
       let a = 0;
       if (input.throttle > 0) {
         const ratio = clamp(vf / top, 0, 1.2);
         a += s.accel * input.throttle * Math.max(0, 1 - ratio * ratio) * Math.min(1.15, 0.45 + grip * 0.7);
         if (this.nitroOn) a += s.accel * 0.75 * s.nitroPower;
+        if (boosting) a += s.accel * 1.1;
         if (vf < -0.5) a += 12 * input.throttle; // throttle while rolling backward brakes first
       }
       if (input.brake > 0) {
@@ -431,8 +435,8 @@ export class Car {
 
       // gravity along slope
       world.normalAt(this.pos.x, this.pos.z, _n);
-      this.vel.x += G * _n.y * _n.x * dt * 0.7;
-      this.vel.z += G * _n.y * _n.z * dt * 0.7;
+      this.vel.x += G * (this.gravityScale ?? 1) * _n.y * _n.x * dt * 0.7;
+      this.vel.z += G * (this.gravityScale ?? 1) * _n.y * _n.z * dt * 0.7;
       // bumpy surfaces jiggle the body
       if (sp.bump > 0 && speed > 5) this.bodyPitch += (Math.random() - 0.5) * sp.bump * 0.02 * Math.min(1, speed / 20) / s.stability;
       this.prevVf = vf;
@@ -460,7 +464,7 @@ export class Car {
 
     // ---------------- integrate ----------------
     const ox = this.pos.x, oz = this.pos.z, oy = this.pos.y;
-    this.vel.y -= G * dt;
+    this.vel.y -= G * (this.gravityScale ?? 1) * dt;
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     this.pos.y += this.vel.y * dt;
