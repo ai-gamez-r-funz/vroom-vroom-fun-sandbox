@@ -251,3 +251,25 @@ label { display: flex; gap: 10px; align-items: center; }
 .standings tr.me td { color: var(--accent); font-weight: 700; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; border: 1px solid rgba(0,0,0,0.5); vertical-align: middle; }
 .act-big small { font-size: 60%; color: var(--muted); }
+
+/* ------------------------------------------------ online */
+.panel.online { max-width: 900px; }
+.panel.online input, .panel.online select { background: #0d121a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; }
+.panel.online label { margin: 8px 0; }
+.panel.online label input { flex: 1; }
+.mode-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.mode-btn { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; }
+.mode-btn small { color: var(--muted); font-weight: 400; font-size: 12px; line-height: 1.35; }
+.room-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.room-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.04); flex-wrap: wrap; }
+.room-row.me { outline: 1px solid var(--accent); }
+.room-row small { color: var(--muted); margin-left: 6px; }
+.room-row button { padding: 4px 8px; font-size: 12px; margin-left: 4px; }
+.mp-settings { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.code b { font: 800 20px ui-monospace, monospace; letter-spacing: 3px; color: var(--accent); margin-left: 6px; }
+.event-banner { background: rgba(255,210,63,0.12); border: 1px solid rgba(255,210,63,0.4); padding: 6px 10px; border-radius: 8px; }
+.mp-chat { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+.mp-chat-log { max-height: 140px; overflow-y: auto; font-size: 13px; line-height: 1.5; }
+.mp-chat input { flex: 1; min-width: 160px; }
+.emotes button { padding: 4px 8px; }
+.teams-score { font: 800 22px system-ui; }

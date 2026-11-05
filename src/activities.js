@@ -255,7 +255,7 @@ export class Activities {
     }
 
     if (this.current) this.updateCurrent(dt, car, input);
-    else if ((this.game.missions && this.game.missions.active) || this.game.racing?.active) { this.prompt = null; this.game.ui.setPrompt(null); }
+    else if ((this.game.missions && this.game.missions.active) || this.game.racing?.active || this.game.mp?.inRoom) { this.prompt = null; this.game.ui.setPrompt(null); }
     else this.updatePrompt(car, input);
     this.updateArrow(car, t);
   }

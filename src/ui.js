@@ -105,7 +105,7 @@ export class UI {
     this.prompt.innerHTML = html || '';
     this.prompt.style.display = html ? 'block' : 'none';
   }
-  setActivity(html) {
+  setActivity(html, opts = {}) {
     // Only the body is re-rendered each frame; the Quit button stays put so taps on it register.
     if (!this.actBody) {
       this.activity.innerHTML = '<div class="act-body"></div><button class="act-quit" data-key="Backspace">✕ Quit</button>';
@@ -114,6 +114,7 @@ export class UI {
     if (html && html !== this._actHtml) this.actBody.innerHTML = html;
     this._actHtml = html;
     this.activity.style.display = html ? 'block' : 'none';
+    this.activity.lastChild.style.display = opts.quit === false ? 'none' : '';
   }
   setBanner(text) {
     this.banner.textContent = text || '';
@@ -277,6 +278,7 @@ export class UI {
         const p = PROPERTIES.find((x) => x.id === arg);
         g.activities.current && g.activities.end(false, 'Event abandoned');
         g.car.place(p.mx + Math.sin(p.yaw) * 6, p.mz + Math.cos(p.yaw) * 6, p.yaw, g.world);
+        g.mp.afterTeleport('travel');
         this.closeModal();
         this.toast(`Travelled to ${p.name}`);
         break;
@@ -292,8 +294,10 @@ export class UI {
       case 'map': this.openMap(); break;
       case 'clearwp': g.waypoint = null; this.renderMap(); break;
       case 'jobs': this.openModal('jobs', ''); g.missions.renderBoard(); break;
+      case 'online': g.mp.open(); break;
       default:
-        if (act.startsWith('m-')) g.missions.onAct(act, arg, el);
+        if (act.startsWith('mp-')) g.mp.onAct(act, arg, el);
+        else if (act.startsWith('m-')) g.missions.onAct(act, arg, el);
         else if (act.startsWith('r-') || act.startsWith('d-')) g.racing.onAct(act, arg, el);
     }
   }
@@ -315,6 +319,7 @@ export class UI {
       <tr><td><kbd>Shift</kbd></td><td>Nitro</td></tr>
       <tr><td><kbd>E</kbd></td><td>Start event / enter garage at markers</td></tr>
       <tr><td><kbd>G</kbd></td><td>Garage (buy cars, upgrades, paint)</td></tr>
+      <tr><td><kbd>O</kbd> / <kbd>T</kbd></td><td>Play online / chat</td></tr>
       <tr><td><kbd>J</kbd></td><td>Job board, story jobs &amp; Mission Forge</td></tr>
       <tr><td><kbd>Y</kbd> / <kbd>N</kbd></td><td>Accept / ignore a job offer that pops up while driving</td></tr>
       <tr><td><kbd>M</kbd></td><td>World map, waypoints &amp; fast travel</td></tr>
@@ -344,6 +349,7 @@ export class UI {
     this.openModal('pause', `<h2>Paused</h2>
       <div class="menu-buttons">
         <button class="primary" data-act="close">Resume</button>
+        <button data-act="online">👥 Play online</button>
         <button data-act="jobs">Jobs &amp; Mission Forge</button>
         <button data-act="garage">Garage</button>
         <button data-act="map">Map</button>

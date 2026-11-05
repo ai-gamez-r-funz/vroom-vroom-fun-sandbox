@@ -11,6 +11,7 @@ import { MissionManager } from './missions/manager.js';
 import { FX } from './fx.js';
 import { Motorpark } from './motorpark.js';
 import { Racing } from './racing.js';
+import { Multiplayer } from './net/multiplayer.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
@@ -60,6 +61,7 @@ class Game {
     this.activities = new Activities(this);
     this.missions = new MissionManager(this);
     this.racing = new Racing(this);
+    this.mp = new Multiplayer(this);
     this.applyQuality();
 
     window.addEventListener('resize', () => this.resize());
@@ -76,6 +78,7 @@ class Game {
   begin() {
     this.started = true;
     this.audio.start();
+    setTimeout(() => this.mp.afterBegin(), 300);
     if (!this.state.data.seenHelp) {
       this.state.data.seenHelp = true;
       this.state.save();
@@ -84,7 +87,8 @@ class Game {
   }
 
   setPaused(p) {
-    this.paused = p;
+    // online, the world keeps running behind menus (other players don't pause!)
+    this.paused = p && !(this.mp && this.mp.inRoom);
     this.input.enabled = !p;
   }
 
@@ -214,18 +218,19 @@ class Game {
 
   // Where the GPS arrow and minimap route should point (event > mission > waypoint).
   currentTarget() {
-    return this.racing.targetPoint() || this.activities.targetPoint() || this.missions.targetPoint() || this.waypoint;
+    return this.mp.targetPoint() || this.racing.targetPoint() || this.activities.targetPoint() || this.missions.targetPoint() || this.waypoint;
   }
 
   // extra minimap dots (race rivals, online players...)
   extraDots() {
-    return this.racing.dots();
+    return this.racing.dots().concat(this.mp.dots());
   }
 
   resetCar() {
     if (this.racing.reset()) return;
     const s = this.car.lastSafe;
     this.car.place(s.pos.x, s.pos.z, s.yaw, this.world);
+    this.mp.afterTeleport('reset');
   }
 
   frame() {
@@ -239,6 +244,7 @@ class Game {
       else if (inp.garage) { if (ui.openPanel === 'garage') ui.closeModal(); else if (!ui.isOpen) ui.openGarage(); }
       else if (inp.map) { if (ui.openPanel === 'map') ui.closeModal(); else if (!ui.isOpen) ui.openMap(); }
       else if (inp.help && !ui.isOpen) ui.openHelp();
+      else if (inp.online || inp.chat) { if (ui.openPanel === 'online' && !inp.chat) ui.closeModal(); else { if (ui.openPanel !== 'online') { ui.closeModal(); this.mp.open(); } if (inp.chat) setTimeout(() => ui.modal.querySelector('#mp-chat-input')?.focus(), 30); } }
       else if (inp.jobs) { if (ui.openPanel === 'jobs') ui.closeModal(); else if (!ui.isOpen) { ui.openModal('jobs', ''); this.missions.renderBoard(); } }
     }
 
@@ -247,7 +253,7 @@ class Game {
       if (inp.camera) this.cameraMode = (this.cameraMode + 1) % 3;
       if (inp.reset) this.resetCar();
       if (inp.horn) this.audio.horn();
-      const frozen = this.activities.frozen || this.missions.frozen || this.racing.frozen;
+      const frozen = this.activities.frozen || this.missions.frozen || this.racing.frozen || this.mp.frozen;
       const ci = frozen ? { steer: 0, throttle: 0, brake: 0, handbrake: true, nitro: false } : inp; // handbrake: brake would reverse
       car.throttle = ci.throttle;
       // regional snow: the north is always snowy-ish
@@ -270,6 +276,7 @@ class Game {
       this.activities.update(dt, car, inp);
       this.missions.update(dt, inp);
       this.racing.update(dt, inp);
+      this.mp.update(dt);
       if (this.racing.cur) for (const r of this.racing.cur.racers) if (r.ai && r.car.pos.distanceTo(car.pos) < 200) this.fx.updateCar(r.car, dt);
       this.gpsTimer = (this.gpsTimer || 0) - dt;
       if (this.gpsTimer <= 0) {

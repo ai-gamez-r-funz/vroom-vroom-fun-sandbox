@@ -32,6 +32,21 @@ GitHub Pages or itch.io as-is.
 - Free-roam rewards for jumps, drifts, smashing props and speed traps
 - 40 hidden golden wrenches to collect
 
+**Vroom Ring Motorpark** (south of the ring highway)
+- An always-open circuit racing venue with 5 layouts: Speedway Oval, Crossover Eight, Jump Jungle, Hairpin Twister and Serpent Sprint. Each has its own kerbs, tyre walls, ramps and obstacles
+- Race up to 7 AI rivals at Rookie, Pro or Legend difficulty, or run time trials. Lap records are saved
+- The Crunch Bowl derby arena: smash AI cars until yours is the last one running
+- City races are now time trials
+
+**Multiplayer** (see [below](#multiplayer))
+- Rooms with codes and invite links, quick-play matchmaking, a public room browser, host controls, ready-up and red/blue teams
+- Modes: Party Cruise with group power-ups, Circuit Race (optional items), Destruction Derby, Cops & Robbers and Hot Potato. Challenge anyone to a 1v1 duel
+- Warp next to friends, chat and emotes, automatic reconnect that keeps your place, and results you can share as a link
+
+**Effects & mobile**
+- Tyre smoke, surface-coloured dust, skid marks, water splashes, crash sparks, nitro flames and flying leaves
+- A compact HUD on phones, a touch menu bar, and tappable Quit and job-offer buttons
+
 **Mission Forge** (procedural jobs, see [below](#mission-forge))
 - Job offers pop up while you free-roam. Press <kbd>Y</kbd> to accept or <kbd>N</kbd> to ignore, or just keep driving and they expire
 - A Job Board (<kbd>J</kbd>) with jobs picked for your situation, hand-written story jobs, and a Forge tab for designing missions
@@ -56,11 +71,47 @@ GitHub Pages or itch.io as-is.
 | R | Reset car to the road |
 | Backspace | Quit the current event |
 | J | Job board, story jobs, Mission Forge |
+| O / T | Play online / chat |
 | Y / N | Accept / ignore a job offer |
 | Esc | Pause menu, settings, weather and time of day |
 
 Gamepads work too: RT/LT to drive, the left stick to steer, A for handbrake, B for nitro, X to interact and Y to change camera.
 On touch devices, on-screen buttons appear.
+
+## Multiplayer
+
+The game talks to a small Node server in [`server/`](server/README.md). GitHub Pages can't run one, so you host it yourself (Docker image included).
+The server is authoritative for everything that decides a result:
+- Rooms, membership, the host and teams
+- Matchmaking and event start and finish
+- Race checkpoints and laps (with anti-shortcut windows), derby damage, cop busts and bomb passes
+- Power-up spawns and pickups, warps, results, and reconnect slots
+
+Each client simulates its own car and streams its state 15 times a second. The server checks every update against a speed limit and only allows teleports it has granted (event starts, warps, power-ups and short car resets), so it snaps back anything else.
+
+Run it locally:
+
+```bash
+cd server
+npm install
+npm start
+```
+
+Then serve the game on `localhost` and press <kbd>O</kbd>. It connects to `ws://localhost:8787` by default.
+For GitHub Pages, deploy the server somewhere that supports WebSockets (Fly.io, Render, Railway or a VPS) and set `MP_SERVER_URL` in `src/config.js`
+to its `wss://` address. Players can also paste a server address into the Online panel, or open a link with `?server=wss://…`.
+
+| Mode | How it works |
+|---|---|
+| 🎉 Party Cruise | Free roam with group power-ups: Group Nitro, Moon Gravity, Party Bounce, Disco Paint, Rally Magnet, Swaparoo, Giant Mode and Snail Trail |
+| 🏁 Circuit Race | Any Motorpark layout, 1–5 laps, optional item crates (Turbo, Giant, Snail Trail…). In team mode, finishing points are added up per team |
+| 💥 Destruction Derby | Crunch Bowl. Damage depends on who hit whom, and leaving the bowl hurts. Last car (or team) standing wins. Shields and repair kits spawn |
+| 🚓 Cops & Robbers | Robbers get a 10 s head start. A cop who stays close to a robber busts them, and busted robbers become cops. Robbers win if anyone is still free after 4 minutes |
+| 💣 Hot Potato | Someone has the bomb. Touch another car to pass it on, but not straight back. When the fuse runs out, the holder is out |
+| ⚔️ Duel | Challenge anyone in the room to a 1-lap race. Everyone else keeps cruising and can watch |
+
+Invite links look like `?room=CODE&server=wss://…`. Result links (`?result=ID&server=…`) open a results card on any device.
+Run `npm test` in `server/` for the end-to-end protocol tests: they use bot clients to cover matchmaking, validation, every mode, reconnects and rate limiting.
 
 ## Mission Forge
 
@@ -152,7 +203,13 @@ src/ui.js                 HUD, minimap, garage, world map, menus
 src/audio.js              Web Audio synthesized engine, skids, wind, rain and UI sounds
 src/input.js              keyboard, gamepad and touch input
 src/state.js              save data, money, XP and levels
-src/config.js             asset toggles
+src/config.js             asset toggles and multiplayer server address
+src/fx.js                 particles (smoke, dust, sparks, flames, splashes) and skid marks
+src/motorpark.js          Motorpark track layouts, tyre walls, grandstands and derby arena
+src/racing.js             circuit races against AI and single-player derby
+src/net/                  multiplayer client: connection, remote cars, lobby/room UI, events
+shared/                   code shared with the server: tracks, protocol constants
+server/                   Node multiplayer server (rooms, modes, results) + tests
 src/missions/forge.js     mission templates, Director rules, JSON schema
 src/missions/engine.js    stage runner: objectives, rope chases, cargo/passengers, rewards, HUD
 src/missions/manager.js   offers while driving, Job Board, Forge UI, persistence

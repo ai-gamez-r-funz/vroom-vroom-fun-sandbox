@@ -62,6 +62,8 @@ export class Input {
     s.accept = this.hit('KeyY');
     s.decline = this.hit('KeyN');
     s.jobs = this.hit('KeyJ');
+    s.online = this.hit('KeyO');
+    s.chat = this.hit('KeyT');
 
     // Gamepad (standard mapping)
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
